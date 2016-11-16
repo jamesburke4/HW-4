@@ -1,6 +1,6 @@
 ---
 title: "MATH 216 Homework 4"
-author: "WRITE YOUR NAME HERE"
+author: "James Burke"
 output:
   html_document:
     toc: true
@@ -10,7 +10,6 @@ output:
 ---
 
 ```{r, echo=FALSE, message=FALSE, warning=FALSE, fig.width=8, fig.height=4.5}
-# Suggested packages; feel free to use more!
 library(tidyverse)
 library(USAboundaries)
 library(maptools)
@@ -25,8 +24,8 @@ library(broom)
 Please indicate
 
 * Who you collaborated with:
-* Roughly how much time you spent on this HW so far:
-* The URL of the RPubs published URL [here](https://www.nhl.com/).
+* Roughly how much time you spent on this HW so far: 7 Hours
+* The URL of the RPubs published URL [here](http://rpubs.com/jamesburke4/HW-4).
 * What gave you the most trouble:
 * Any comments you have:
 
@@ -42,15 +41,92 @@ the color corresponds to the distance of the given area to the shipping hub,
 which is marked on the map with a large red dot.
 
 ```{r, eval=TRUE, echo=FALSE, message=FALSE, warning=FALSE, fig.width=8, fig.height=4.5}
-# Perform your computations here:
+### PICKING LOCATION FOR SHIPPING HUB ###
+
+# Extract Population Data
+county_pop_data <- read_csv(file="County_Data.csv") %>%
+  rename(
+    Pop_Total = SE_T001_001,    # Total Population
+    Pop_Density = SE_T002_002   # Population Density
+    ) %>% 
+  select(Geo_NAME, Geo_COUNTY, Geo_FIPS, Pop_Total, Pop_Density)
+
+# Get County Spatial Polygons Data Frame
+county_shp <- us_counties()
+
+# Generate Centroid Values
+centroids <- data.frame(coordinates(county_shp))
+
+# Bind Centroid Values to County Data
+county_data <- bind_cols(county_shp@data, centroids) %>% 
+  rename(
+    centroid_long = X1,
+    centroid_lat = X2
+  ) %>% 
+  mutate(
+    # creating geographic FIPS codes
+    Geo_FIPS = as.numeric(paste(statefp, countyfp, sep = ""))
+  )
+
+# Joining Population Data with County Data
+hub_data <- left_join(county_data, county_pop_data, by = "Geo_FIPS") %>%
+  filter(!statefp %in% c("02", "15", "72")) # exclude Alaska, Hawaii, & Puerto Rico
+
+# Manually Inputing Fairfax County, VA Population Data
+hub_data$Pop_Total[hub_data$Geo_FIPS == 51600] = 1081726
+
+hub_data <- hub_data %>%
+  mutate(
+    weighted_long = centroid_long * Pop_Total,
+    weighted_lat = centroid_lat * Pop_Total
+  ) %>% 
+  select(Geo_FIPS, Pop_Total, weighted_long, weighted_lat) %>%
+  filter(!is.na(Pop_Total))
+
+# Calculating Hub Location - using center of mass formula
+hub_x_coord <- sum(hub_data$weighted_long) / sum(hub_data$Pop_Total)
+hub_y_coord <- sum(hub_data$weighted_lat) / sum(hub_data$Pop_Total)
+```
+
+
+
+
+```{r, eval=TRUE, echo=FALSE, message=FALSE, warning=FALSE, fig.width=8, fig.height=4.5}
+### CREATING CODE FOR MAP ###
+
+# This code is repetitive but is generalized so that the map can easily be switched from
+#  county data to state data and vice versa
+
+# Generating State/County Dataset
+chart_shp <- us_counties()    ## can substitute "us_states()" ##
+centroids <- data.frame(coordinates(chart_shp))
+
+chart_data <- bind_cols(chart_shp@data, centroids) %>% 
+  rename(
+    centroid_long = X1,
+    centroid_lat = X2
+  )
+
+chart_polygon <- tidy(chart_shp, region="geoid")
+
+geo_data <- left_join(chart_polygon, chart_data, by=c("id"="geoid")) %>%
+  filter(!statefp %in% c("02", "15", "72"))
+
+geo_data <- geo_data %>% 
+  # Using distance formula to calculate distance from hub
+  mutate(distance = sqrt(
+                         (centroid_long - hub_x_coord)^2 + 
+                         (centroid_lat - hub_y_coord)^2
+                         ))
 
 ```
 
 
-```{r, eval=FALSE, echo=FALSE, message=FALSE, warning=FALSE, fig.width=8, fig.height=4.5}
-# Here is a template of a ggplot call; feel free to change this to suit your
-# needs. Once your computations above are complete, set the eval=TRUE on the
-# line above to tell R Markdown to run this code block.
+
+Map with shipping hub located at center of the US weighted by population. By using the center of mass formula and weighting the latitudes and longitudes of all US county centroids by the county populations according to the 2010 census. Fairfax County, VA population data was manually inputed.
+```{r, eval=TRUE, echo=FALSE, message=FALSE, warning=FALSE, fig.width=8, fig.height=4.5}
+### PLOTTING THE MAP ###
+
 ggplot(data=geo_data, aes(x=long, y=lat, group=group, fill=distance)) +
   # Plot choropleth polygons, low -> high being colored white -> dark green
   geom_polygon() +
@@ -61,9 +137,24 @@ ggplot(data=geo_data, aes(x=long, y=lat, group=group, fill=distance)) +
   annotate("point", x=hub_x_coord, y=hub_y_coord, col="red", size=5) +
   # Correct aspect ratio for map
   coord_map()
+
+
+
 ```
 
 
+Map with shipping hub location slightly adjusted for logistical purposes. The calculated hub was located in rural Missouri and just west of St. Louis. Therefore, I used Google Maps to find a location closer to the city of St. Louis where there is better access to major roads and airports, namely Lambert–St. Louis International Airport.
+```{r, eval=TRUE, echo=FALSE, message=FALSE, warning=FALSE, fig.width=8, fig.height=4.5}
+hub_x_coord <- -90.384601
+hub_y_coord <- 38.849079
+
+ggplot(data=geo_data, aes(x=long, y=lat, group=group, fill=distance)) +
+  geom_polygon() +
+  scale_fill_gradient(low="white", high="darkgreen") +
+  geom_path(size=0.1) +
+  annotate("point", x=hub_x_coord, y=hub_y_coord, col="red", size=5) +
+  coord_map()
 
 
 
+```
