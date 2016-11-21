@@ -118,7 +118,6 @@ geo_data <- geo_data %>%
                          (centroid_long - hub_x_coord)^2 + 
                          (centroid_lat - hub_y_coord)^2
                          ))
-
 ```
 
 
@@ -137,9 +136,6 @@ ggplot(data=geo_data, aes(x=long, y=lat, group=group, fill=distance)) +
   annotate("point", x=hub_x_coord, y=hub_y_coord, col="red", size=5) +
   # Correct aspect ratio for map
   coord_map()
-
-
-
 ```
 
 
@@ -154,7 +150,4 @@ ggplot(data=geo_data, aes(x=long, y=lat, group=group, fill=distance)) +
   geom_path(size=0.1) +
   annotate("point", x=hub_x_coord, y=hub_y_coord, col="red", size=5) +
   coord_map()
-
-
-
 ```
